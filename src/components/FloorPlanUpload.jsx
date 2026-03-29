@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
+import { getMarkers, createMarker, deleteMarker } from '../services/markerService';
 import './FloorPlanUpload.css';
 
 export default function FloorPlanUpload({ onClose }) {
   const [floorPlan, setFloorPlan] = useState(() => localStorage.getItem('floorPlan'));
-  const [exits, setExits] = useState(() => {
-    const saved = localStorage.getItem('exits');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [exits, setExits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [exitName, setExitName] = useState('');
   const [gpsPosition, setGpsPosition] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
@@ -14,8 +14,22 @@ export default function FloorPlanUpload({ onClose }) {
   const [selectedExit, setSelectedExit] = useState(null);
   const watchIdRef = useRef(null);
 
+  // Load markers from service
+  const loadMarkers = async () => {
+    try {
+      setLoading(true);
+      const data = await getMarkers();
+      setExits(data);
+    } catch (err) {
+      console.error('Failed to load markers:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // GPS tracking
   useEffect(() => {
+    loadMarkers();
     if ('geolocation' in navigator) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
@@ -52,42 +66,57 @@ export default function FloorPlanUpload({ onClose }) {
   };
 
   // Save current GPS position as exit marker
-  const saveGPSPosition = () => {
+  const saveGPSPosition = async () => {
     if (!gpsPosition) {
       alert('GPS position not available. Please wait for GPS signal.');
       return;
     }
 
     const name = exitName || `Exit ${exits.length + 1}`;
-    const newExit = {
-      lat: gpsPosition.lat,
-      lng: gpsPosition.lng,
-      altitude: gpsAltitude,
-      accuracy: gpsAccuracy,
-      name,
-      timestamp: new Date().toISOString()
-    };
-    
-    const updatedExits = [...exits, newExit];
-    setExits(updatedExits);
-    localStorage.setItem('exits', JSON.stringify(updatedExits));
-    setExitName('');
-    
-    alert(`Saved: ${name}\nLat: ${gpsPosition.lat.toFixed(6)}\nLng: ${gpsPosition.lng.toFixed(6)}`);
+    try {
+      setSaving(true);
+      const newMarker = await createMarker({
+        name,
+        lat: gpsPosition.lat,
+        lng: gpsPosition.lng,
+        altitude: gpsAltitude,
+        accuracy: gpsAccuracy,
+        timestamp: new Date().toISOString(),
+      });
+      setExits((prev) => [...prev, newMarker]);
+      setExitName('');
+      // Notify CompassView via storage event
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      alert('Failed to save marker. Please try again.');
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeExit = (index) => {
-    const updatedExits = exits.filter((_, i) => i !== index);
-    setExits(updatedExits);
-    localStorage.setItem('exits', JSON.stringify(updatedExits));
+  const removeExit = async (id) => {
+    try {
+      await deleteMarker(id);
+      setExits((prev) => prev.filter((m) => m.id !== id));
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      alert('Failed to remove marker.');
+      console.error(err);
+    }
   };
 
-  const clearAll = () => {
-    if (confirm('Clear floor plan and all exits?')) {
-      setFloorPlan(null);
+  const clearAll = async () => {
+    if (!confirm('Clear all markers?')) return;
+    try {
+      await Promise.all(exits.map((m) => deleteMarker(m.id)));
       setExits([]);
+      setFloorPlan(null);
       localStorage.removeItem('floorPlan');
-      localStorage.removeItem('exits');
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {
+      alert('Failed to clear markers.');
+      console.error(err);
     }
   };
 
@@ -166,25 +195,33 @@ export default function FloorPlanUpload({ onClose }) {
           <button 
             onClick={saveGPSPosition} 
             className="save-gps-btn"
-            disabled={!gpsPosition}
+            disabled={!gpsPosition || saving}
           >
-            📍 Save Current GPS Position
+            {saving ? 'Saving…' : '📍 Save Current GPS Position'}
           </button>
 
           <div className="exits-list">
             <h3>Saved Exit Markers ({exits.length})</h3>
-            {exits.map((exit, i) => (
-              <div key={i} className="exit-item">
+            {loading ? (
+              <div style={{ color: '#aaa', textAlign: 'center', padding: '10px' }}>
+                Loading markers…
+              </div>
+            ) : exits.length === 0 ? (
+              <div style={{ color: '#555', textAlign: 'center', padding: '10px' }}>
+                No markers saved yet
+              </div>
+            ) : exits.map((exit) => (
+              <div key={exit.id} className="exit-item">
                 <div 
-                  className={`exit-info ${selectedExit === i ? 'expanded' : ''}`}
-                  onClick={() => setSelectedExit(selectedExit === i ? null : i)}
+                  className={`exit-info ${selectedExit === exit.id ? 'expanded' : ''}`}
+                  onClick={() => setSelectedExit(selectedExit === exit.id ? null : exit.id)}
                   onTouchEnd={(e) => {
                     e.preventDefault();
-                    setSelectedExit(selectedExit === i ? null : i);
+                    setSelectedExit(selectedExit === exit.id ? null : exit.id);
                   }}
                 >
                   <div className="exit-name">{exit.name}</div>
-                  {selectedExit === i ? (
+                  {selectedExit === exit.id ? (
                     <div className="exit-details">
                       <div className="detail-row">
                         <span className="detail-label">Latitude:</span>
@@ -212,16 +249,11 @@ export default function FloorPlanUpload({ onClose }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="exit-coords">
-                      Tap to view details
-                    </div>
+                    <div className="exit-coords">Tap to view details</div>
                   )}
                 </div>
                 <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeExit(i);
-                  }} 
+                  onClick={(e) => { e.stopPropagation(); removeExit(exit.id); }} 
                   className="remove-btn"
                 >
                   Remove

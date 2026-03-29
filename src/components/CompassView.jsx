@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { getMarkers } from '../services/markerService';
 import './CompassView.css';
 
 export default function CompassView({ onOpenSetup }) {
@@ -20,10 +21,8 @@ export default function CompassView({ onOpenSetup }) {
   const [showMarkerDetails, setShowMarkerDetails] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const [floorPlan, setFloorPlan] = useState(() => localStorage.getItem('floorPlan'));
-  const [exits, setExits] = useState(() => {
-    const saved = localStorage.getItem('exits');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [exits, setExits] = useState([]);
+  const [markersLoading, setMarkersLoading] = useState(true);
   const [calibration, setCalibration] = useState(() => {
     const saved = localStorage.getItem('gpsCalibration');
     return saved ? JSON.parse(saved) : null;
@@ -34,26 +33,33 @@ export default function CompassView({ onOpenSetup }) {
   // Get selected marker
   const selectedMarker = exits.length > 0 ? exits[selectedMarkerIndex] : null;
   
+  // Load markers from service (mock → real API later)
+  const loadMarkers = useCallback(async () => {
+    try {
+      setMarkersLoading(true);
+      const data = await getMarkers();
+      setExits(data);
+    } catch (err) {
+      console.error('Failed to load markers:', err);
+    } finally {
+      setMarkersLoading(false);
+    }
+  }, []);
+
   // Load floor plan and exits from localStorage (with live updates)
   useEffect(() => {
-    const handleStorageChange = () => {
-      const savedExits = localStorage.getItem('exits');
-      if (savedExits) {
-        setExits(JSON.parse(savedExits));
-      }
-    };
+    loadMarkers();
 
-    // Listen for storage changes
+    // Re-fetch when storage changes (e.g. marker added in Setup modal)
+    const handleStorageChange = () => loadMarkers();
     window.addEventListener('storage', handleStorageChange);
-    
-    // Also check periodically for changes (in case storage event doesn't fire)
     const interval = setInterval(handleStorageChange, 1000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, []);
+  }, [loadMarkers]);
 
   // Request device orientation permission (iOS)
   const requestPermission = async () => {
@@ -339,7 +345,11 @@ export default function CompassView({ onOpenSetup }) {
             </>
           ) : (
             <div className="top-no-marker">
-              {exits.length === 0 ? 'No markers — tap Setup' : 'Waiting for GPS…'}
+              {markersLoading
+                ? 'Loading markers…'
+                : exits.length === 0
+                  ? 'No markers — tap Setup'
+                  : 'Waiting for GPS…'}
             </div>
           )}
         </div>
