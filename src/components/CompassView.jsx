@@ -74,67 +74,71 @@ export default function CompassView({ onOpenSetup }) {
     }
   };
 
-  // Device orientation listener with debouncing
+  // Device orientation listener - clean, single source of truth
   useEffect(() => {
     if (!permissionGranted) return;
 
-    let lastUpdate = 0;
-    const updateThreshold = 100; // Update every 100ms max
+    // Track which event source we're using to avoid conflicts
+    let usingAbsolute = false;
+
+    const applyHeading = (raw) => {
+      const h = ((raw % 360) + 360) % 360;
+      setHeading(prev => {
+        // Only update if change is meaningful (reduces noise)
+        const diff = Math.abs(h - prev);
+        const wrapped = diff > 180 ? 360 - diff : diff;
+        return wrapped < 0.5 ? prev : h;
+      });
+    };
+
+    const handleAbsolute = (event) => {
+      if (event.alpha === null) return;
+      usingAbsolute = true;
+      // deviceorientationabsolute: alpha is degrees from north, increases clockwise
+      // So compass heading = 360 - alpha (alpha goes counter-clockwise)
+      applyHeading(360 - event.alpha);
+    };
 
     const handleOrientation = (event) => {
-      const now = Date.now();
-      if (now - lastUpdate < updateThreshold) return;
-      lastUpdate = now;
+      // If we already have absolute data, ignore non-absolute events
+      if (usingAbsolute) return;
 
-      let alpha = event.alpha;
-      
-      if (alpha !== null) {
-        // iOS uses webkitCompassHeading
-        if (event.webkitCompassHeading !== undefined) {
-          alpha = event.webkitCompassHeading;
-        } else if (event.absolute && event.alpha !== null) {
-          // Android: convert alpha to compass heading
-          alpha = 360 - alpha;
-        }
-        
-        // Round to reduce micro-changes
-        alpha = Math.round(alpha * 10) / 10;
-        setHeading(alpha);
+      if (event.webkitCompassHeading != null) {
+        // iOS Safari: webkitCompassHeading is true north heading, 0-360 clockwise
+        applyHeading(event.webkitCompassHeading);
+      } else if (event.alpha !== null) {
+        // Android without absolute: same conversion
+        applyHeading(360 - event.alpha);
       }
     };
 
-    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientationabsolute', handleAbsolute, true);
     window.addEventListener('deviceorientation', handleOrientation, true);
-    
+
     return () => {
-      window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.removeEventListener('deviceorientationabsolute', handleAbsolute, true);
       window.removeEventListener('deviceorientation', handleOrientation, true);
     };
   }, [permissionGranted]);
 
-  // Smooth heading interpolation with threshold to prevent constant updates
+  // Smooth heading interpolation — runs on rAF, not setInterval
   useEffect(() => {
-    const interpolate = () => {
-      setSmoothHeading(prev => {
-        let diff = heading - prev;
-        
-        // Handle 360/0 wrap
+    let rafId;
+
+    const step = () => {
+      setSmoothHeading(current => {
+        let diff = heading - current;
         if (diff > 180) diff -= 360;
         if (diff < -180) diff += 360;
-        
-        // Only update if difference is significant (reduce re-renders)
-        if (Math.abs(diff) < 0.1) return prev;
-        
-        const newHeading = prev + diff * 0.3;
-        return (newHeading + 360) % 360;
+        if (Math.abs(diff) < 0.2) return current;
+        return (current + diff * 0.15 + 360) % 360;
       });
+      rafId = requestAnimationFrame(step);
     };
 
-    const interval = setInterval(interpolate, 50); // Reduced frequency
-    return () => clearInterval(interval);
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
   }, [heading]);
-
-  // Helper function to convert GPS to floor plan coordinates
   const gpsToFloorPlan = useCallback((gps) => {
     if (!calibration) return { x: 50, y: 50 };
     
@@ -190,7 +194,32 @@ export default function CompassView({ onOpenSetup }) {
     };
   }, [calibration, gpsToFloorPlan]);
 
-  // Calculate nearest exit using useMemo with stable reference
+  // Calculate bearing/distance to the SELECTED marker (not just nearest)
+  const selectedMarkerNav = useMemo(() => {
+    if (!selectedMarker || !gpsPosition) return null;
+
+    const R = 6371e3;
+    const φ1 = (gpsPosition.lat * Math.PI) / 180;
+    const φ2 = (selectedMarker.lat * Math.PI) / 180;
+    const Δφ = ((selectedMarker.lat - gpsPosition.lat) * Math.PI) / 180;
+    const Δλ = ((selectedMarker.lng - gpsPosition.lng) * Math.PI) / 180;
+
+    const a = Math.sin(Δφ / 2) ** 2 +
+              Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) -
+              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+
+    return {
+      distance: Math.round(distance),
+      bearing: Math.round(bearing)
+    };
+  }, [selectedMarker, gpsPosition]);
+
+  // Keep nearestExit only for the compass ring indicator (nearest of all markers)
   const nearestExit = useMemo(() => {
     if (exits.length === 0 || !gpsPosition) return null;
 
@@ -198,19 +227,15 @@ export default function CompassView({ onOpenSetup }) {
     let minDistance = Infinity;
 
     exits.forEach(exit => {
-      // Calculate distance using Haversine formula (GPS coordinates)
-      const R = 6371e3; // Earth's radius in meters
+      const R = 6371e3;
       const φ1 = (gpsPosition.lat * Math.PI) / 180;
       const φ2 = (exit.lat * Math.PI) / 180;
       const Δφ = ((exit.lat - gpsPosition.lat) * Math.PI) / 180;
       const Δλ = ((exit.lng - gpsPosition.lng) * Math.PI) / 180;
+      const a = Math.sin(Δφ / 2) ** 2 +
+                Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+      const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const distance = R * c; // Distance in meters
-      
       if (distance < minDistance) {
         minDistance = distance;
         nearest = { ...exit, distance };
@@ -218,19 +243,13 @@ export default function CompassView({ onOpenSetup }) {
     });
 
     if (nearest) {
-      // Calculate bearing from current position to exit
       const φ1 = (gpsPosition.lat * Math.PI) / 180;
       const φ2 = (nearest.lat * Math.PI) / 180;
       const Δλ = ((nearest.lng - gpsPosition.lng) * Math.PI) / 180;
-
       const y = Math.sin(Δλ) * Math.cos(φ2);
       const x = Math.cos(φ1) * Math.sin(φ2) -
                 Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-      let bearing = (Math.atan2(y, x) * 180) / Math.PI;
-      bearing = (bearing + 360) % 360;
-      
-      // Round to reduce re-renders
-      nearest.bearing = Math.round(bearing);
+      nearest.bearing = Math.round((Math.atan2(y, x) * 180 / Math.PI + 360) % 360);
       nearest.distance = Math.round(nearest.distance);
     }
 
@@ -292,12 +311,40 @@ export default function CompassView({ onOpenSetup }) {
     <div className="compass-view">
       {/* Compass content centered */}
       <div className="compass-content">
-        {/* Degree display at top */}
-        <div className="degree-display">
-          {Math.round(smoothHeading)}°
+        {/* Top display: distance + direction arrow to selected marker */}
+        <div className="top-display">
+          {selectedMarker && selectedMarkerNav ? (
+            <>
+              <svg
+                className="direction-arrow"
+                viewBox="0 0 60 80"
+                style={{
+                  transform: `rotate(${selectedMarkerNav.bearing - smoothHeading}deg)`,
+                  willChange: 'transform'
+                }}
+              >
+                {/* Arrow shaft */}
+                <rect x="26" y="30" width="8" height="38" rx="3" fill="#ff5252" />
+                {/* Arrow head */}
+                <polygon points="30,0 52,34 30,24 8,34" fill="#ff5252" />
+              </svg>
+              <div className="top-distance">
+                {selectedMarkerNav.distance >= 1000
+                  ? `${(selectedMarkerNav.distance / 1000).toFixed(1)} km`
+                  : `${selectedMarkerNav.distance} m`}
+              </div>
+              <div className="top-direction">
+                {getCardinalDirection(selectedMarkerNav.bearing)}
+              </div>
+            </>
+          ) : (
+            <div className="top-no-marker">
+              {exits.length === 0 ? 'No markers — tap Setup' : 'Waiting for GPS…'}
+            </div>
+          )}
         </div>
 
-        <div className="compass-container">
+        <div className="compass-container" style={{ '--compass-size': `min(280px, 72vw)` }}>
         {/* Rotating compass ring with markers */}
         <div 
           className="compass-ring"
@@ -321,15 +368,16 @@ export default function CompassView({ onOpenSetup }) {
 
         {/* Cardinal directions - move around the compass */}
         {[
-          { dir: 'N', angle: 0, distance: 115 },
-          { dir: 'E', angle: 90, distance: 115 },
-          { dir: 'S', angle: 180, distance: 115 },
-          { dir: 'W', angle: 270, distance: 115 }
-        ].map(({ dir, angle, distance }) => {
+          { dir: 'N', angle: 0 },
+          { dir: 'E', angle: 90 },
+          { dir: 'S', angle: 180 },
+          { dir: 'W', angle: 270 }
+        ].map(({ dir, angle }) => {
+          const radius = Math.min(280, window.innerWidth * 0.72) / 2 - 25;
           const rotatedAngle = angle - smoothHeading;
           const radians = (rotatedAngle * Math.PI) / 180;
-          const x = Math.sin(radians) * distance;
-          const y = -Math.cos(radians) * distance;
+          const x = Math.sin(radians) * radius;
+          const y = -Math.cos(radians) * radius;
           
           return (
             <div
@@ -380,16 +428,6 @@ export default function CompassView({ onOpenSetup }) {
 
         {/* North indicator (fixed at top) */}
         <div className="north-indicator" />
-
-        {/* Exit direction indicator (rotates to point at exit) */}
-        {nearestExit && (
-          <div
-            className="exit-indicator"
-            style={{
-              transform: `rotate(${nearestExit.bearing - smoothHeading}deg)`
-            }}
-          />
-        )}
       </div>
 
       {/* Marker Selector - Horizontal with Distance */}
@@ -429,8 +467,8 @@ export default function CompassView({ onOpenSetup }) {
 
           {nearestExit && nearestExit.name === selectedMarker.name && (
             <div className="marker-distance">
-              <div className="marker-distance-value">{Math.round(nearestExit.distance)}</div>
-              <div className="marker-distance-label">meters</div>
+              <div className="marker-distance-value">{getCardinalDirection(selectedMarkerNav?.bearing ?? 0)}</div>
+              <div className="marker-distance-label">direction</div>
             </div>
           )}
         </div>
@@ -472,16 +510,16 @@ export default function CompassView({ onOpenSetup }) {
               <div className="marker-detail-row">
                 <span className="marker-label">Distance:</span>
                 <span className="marker-value">
-                  {nearestExit && nearestExit.name === selectedMarker.name 
-                    ? `${Math.round(nearestExit.distance)} m` 
+                  {selectedMarkerNav
+                    ? `${selectedMarkerNav.distance} m`
                     : 'Calculating...'}
                 </span>
               </div>
               <div className="marker-detail-row">
                 <span className="marker-label">Direction:</span>
                 <span className="marker-value">
-                  {nearestExit && nearestExit.name === selectedMarker.name 
-                    ? getCardinalDirection(nearestExit.bearing)
+                  {selectedMarkerNav
+                    ? getCardinalDirection(selectedMarkerNav.bearing)
                     : '-'}
                 </span>
               </div>

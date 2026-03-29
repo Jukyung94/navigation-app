@@ -5,9 +5,9 @@
   height: 100%;
   background: #000;
   color: #fff;
-  padding: 15px;
+  padding: 12px 16px;
   overflow: hidden;
-  position: relative;
+  box-sizing: border-box;
 }
 
 .compass-content {
@@ -17,6 +17,7 @@
   flex: 1;
   justify-content: center;
   width: 100%;
+  min-height: 0;
 }
 
 .permission-screen {
@@ -42,29 +43,55 @@
   cursor: pointer;
 }
 
-.degree-display {
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #fff;
-  margin-bottom: 35px;
+/* ── Top display ── */
+.top-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
+.direction-arrow {
+  width: clamp(36px, 10vw, 56px);
+  height: clamp(48px, 13vw, 72px);
+  filter: drop-shadow(0 0 8px rgba(255, 82, 82, 0.7));
+}
+
+.top-distance {
+  font-size: clamp(1.2rem, 4vw, 1.8rem);
+  font-weight: bold;
+  color: #fff;
+  margin-top: 4px;
+  letter-spacing: 1px;
+}
+
+.top-direction {
+  font-size: clamp(0.75rem, 2.5vw, 0.95rem);
+  color: #aaa;
+  margin-top: 2px;
+}
+
+.top-no-marker {
+  font-size: clamp(0.85rem, 2.5vw, 1rem);
+  color: #555;
+}
+
+/* ── Compass ── */
 .compass-container {
   position: relative;
-  width: 300px;
-  height: 300px;
-  margin: 10px 0;
+  /* Size is driven by a CSS variable set inline */
+  width: var(--compass-size, 280px);
+  height: var(--compass-size, 280px);
   flex-shrink: 0;
 }
 
 .compass-ring {
   position: absolute;
-  width: 300px;
-  height: 300px;
+  inset: 0;
   border: 3px solid #666;
   border-radius: 50%;
   z-index: 2;
-  transition: none;
 }
 
 .degree-marker {
@@ -75,22 +102,21 @@
   top: 5px;
   left: 50%;
   margin-left: -1px;
-  transform-origin: 50% 145px;
+  transform-origin: 50% calc(var(--compass-size, 280px) / 2 - 5px);
 }
 
 .degree-marker.major {
   height: 20px;
   width: 3px;
   background: #aaa;
-  top: 5px;
 }
 
 .degree-label {
   position: absolute;
-  top: 30px;
+  top: 28px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.75rem;
+  font-size: clamp(0.6rem, 1.8vw, 0.75rem);
   color: #aaa;
   white-space: nowrap;
 }
@@ -99,7 +125,7 @@
   position: absolute;
   color: #fff;
   font-weight: bold;
-  font-size: 2rem;
+  font-size: clamp(1.4rem, 5vw, 2rem);
   pointer-events: none;
   width: 40px;
   height: 40px;
@@ -111,15 +137,14 @@
 
 .floor-plan-layer {
   position: absolute;
-  width: 240px;
-  height: 240px;
+  width: calc(var(--compass-size, 280px) - 60px);
+  height: calc(var(--compass-size, 280px) - 60px);
   top: 30px;
   left: 30px;
   border-radius: 50%;
   background-color: rgba(30, 30, 30, 0.8);
   background-size: cover;
   background-position: center;
-  transition: none;
   z-index: 1;
   overflow: hidden;
   cursor: pointer;
@@ -177,74 +202,29 @@
 
 .north-indicator {
   position: absolute;
-  top: -45px;
+  top: -30px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
   width: 0;
   height: 0;
-  border-left: 12px solid transparent;
-  border-right: 12px solid transparent;
-  border-bottom: 20px solid #ff5252;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 18px solid #ff5252;
 }
 
-.exit-indicator {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: #ff5252;
-  border-radius: 50%;
-  bottom: 20px;
-  left: 50%;
-  transform-origin: 50% -130px;
-  z-index: 3;
-  margin-left: -4px;
-}
-
-.exit-indicator::before {
-  content: '';
-  position: absolute;
-  width: 3px;
-  height: 100px;
-  background: #ff5252;
-  bottom: 8px;
-  left: 50%;
-  margin-left: -1.5px;
-}
-
-.distance-display {
-  text-align: center;
-  margin: 15px 0 10px;
-  flex-shrink: 0;
-}
-
-.exit-name {
-  font-size: 1rem;
-  margin-bottom: 3px;
-}
-
-.distance {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #4CAF50;
-}
-
-.direction {
-  font-size: 0.9rem;
-  color: #aaa;
-}
-
-/* Marker Selector - Horizontal Layout */
+/* ── Marker selector ── */
 .marker-selector {
   width: 100%;
-  max-width: 350px;
+  max-width: 360px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  padding: 12px;
-  margin: 10px 0;
+  padding: 10px 12px;
+  margin: 10px 0 4px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .marker-info-left {
@@ -259,7 +239,7 @@
 }
 
 .marker-name {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
   white-space: nowrap;
@@ -277,12 +257,12 @@
 .marker-select {
   flex: 1;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 8px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid #555;
   border-radius: 6px;
   color: #fff;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
@@ -292,23 +272,18 @@
 }
 
 .toggle-details-btn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   background: rgba(255, 255, 255, 0.1);
   border: none;
   border-radius: 6px;
   color: #fff;
-  font-size: 1rem;
+  font-size: 0.9rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
   flex-shrink: 0;
-}
-
-.toggle-details-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .marker-distance {
@@ -316,29 +291,26 @@
   flex-direction: column;
   align-items: flex-end;
   flex-shrink: 0;
-  min-width: 60px;
+  min-width: 52px;
 }
 
 .marker-distance-value {
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: bold;
   color: #4CAF50;
   line-height: 1;
 }
 
 .marker-distance-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #aaa;
   margin-top: 2px;
 }
 
-/* GPS Details Popup */
+/* ── GPS Details Popup ── */
 .gps-popup-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(3px);
   z-index: 2000;
@@ -349,28 +321,30 @@
   animation: fadeIn 0.2s ease-out;
 }
 
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
 .gps-popup-content {
   background: #1a1a1a;
   border: 1px solid #444;
   border-radius: 12px;
   padding: 20px;
-  max-width: 350px;
+  max-width: 340px;
   width: 100%;
-  animation: slideUp 0.3s ease-out;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.25s ease-out;
 }
 
 .gps-popup-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid #333;
 }
 
 .gps-popup-title {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: #fff;
 }
@@ -379,43 +353,32 @@
   background: rgba(255, 255, 255, 0.1);
   border: none;
   color: #fff;
-  font-size: 1.3rem;
-  width: 32px;
-  height: 32px;
+  font-size: 1.2rem;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
-}
-
-.gps-popup-close:hover {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .gps-popup-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .marker-detail-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
-  font-size: 0.9rem;
+  padding: 7px 0;
+  font-size: 0.88rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.marker-detail-row:last-child {
-  border-bottom: none;
-}
+.marker-detail-row:last-child { border-bottom: none; }
 
-.marker-label {
-  color: #aaa;
-  font-weight: 500;
-}
+.marker-label { color: #aaa; font-weight: 500; }
 
 .marker-value {
   color: #fff;
@@ -424,29 +387,28 @@
   text-align: right;
 }
 
+/* ── GPS info card ── */
 .gps-details {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.05);
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  margin: 15px 0;
+  margin: 6px 0;
   width: 100%;
-  max-width: 300px;
+  max-width: 360px;
+  flex-shrink: 0;
 }
 
 .gps-detail-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
-.gps-label {
-  color: #aaa;
-  font-weight: 500;
-}
+.gps-label { color: #aaa; font-weight: 500; }
 
 .gps-value {
   color: #fff;
@@ -454,66 +416,54 @@
   font-family: 'Courier New', monospace;
 }
 
+/* ── Bottom bar ── */
 .bottom-bar {
   width: 100%;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-bottom: 10px;
+  gap: 8px;
+  padding-bottom: env(safe-area-inset-bottom, 10px);
   flex-shrink: 0;
 }
 
 .gps-info {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #aaa;
   text-align: center;
-  min-height: 15px;
+  min-height: 14px;
 }
 
 .button-group {
   display: flex;
-  flex-direction: column;
   gap: 8px;
-  align-items: stretch;
   width: 100%;
-  max-width: 300px;
 }
 
 .action-btn {
-  padding: 10px 20px;
+  flex: 1;
+  padding: 12px 10px;
   background: rgba(255, 255, 255, 0.1);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.3s;
-  min-width: 140px;
+  transition: background 0.2s;
 }
 
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
+.action-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.action-btn.active { background: #4CAF50; }
 
-.action-btn.active {
-  background: #4CAF50;
-}
-
-.test-btn {
-  background: #9C27B0;
-}
-
-.test-btn:hover {
-  background: #7B1FA2;
-}
-
-.nav-buttons {
-  display: flex;
-  gap: 8px;
-}
+.test-btn { background: #9C27B0; }
+.test-btn:hover { background: #7B1FA2; }
 
 .nav-buttons {
   display: flex;
   gap: 8px;
   justify-content: center;
 }
+
+/* ── Unused legacy ── */
+.distance-display, .exit-name, .distance, .direction,
+.exit-indicator { display: none; }
