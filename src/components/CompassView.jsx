@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getMarkers } from '../services/markerService';
+import { t, getLanguage, setLanguage } from '../services/i18n';
 import './CompassView.css';
 
 export default function CompassView({ onOpenSetup }) {
@@ -28,11 +29,28 @@ export default function CompassView({ onOpenSetup }) {
     const saved = localStorage.getItem('gpsCalibration');
     return saved ? JSON.parse(saved) : null;
   });
+  const [language, setLanguageState] = useState(getLanguage());
   
   const watchIdRef = useRef(null);
 
   // Get selected marker
   const selectedMarker = exits.length > 0 ? exits[selectedMarkerIndex] : null;
+  
+  // Language change listener
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      setLanguageState(getLanguage());
+    };
+    window.addEventListener('languagechange', handleLanguageChange);
+    return () => window.removeEventListener('languagechange', handleLanguageChange);
+  }, []);
+  
+  // Toggle language
+  const toggleLanguage = () => {
+    const newLang = language === 'en' ? 'ko' : 'en';
+    setLanguage(newLang);
+    setLanguageState(newLang);
+  };
   
   // Load markers from service (mock → real API later)
   const loadMarkers = useCallback(async () => {
@@ -304,13 +322,13 @@ export default function CompassView({ onOpenSetup }) {
   if (permissionNeeded && !permissionGranted) {
     return (
       <div className="permission-screen">
-        <h2>Compass Permission Required</h2>
-        <p>This app needs access to your device's compass to show directions.</p>
+        <h2>{t('compassPermissionTitle')}</h2>
+        <p>{t('compassPermissionDesc')}</p>
         <button onClick={requestPermission} className="permission-btn">
-          Enable Compass
+          {t('enableCompass')}
         </button>
         <p style={{ marginTop: '20px', fontSize: '0.9rem', color: '#888' }}>
-          Note: Make sure you're using HTTPS and on a mobile device with compass sensor.
+          {t('permissionNote')}
         </p>
       </div>
     );
@@ -339,8 +357,8 @@ export default function CompassView({ onOpenSetup }) {
               </svg>
               <div className="top-distance">
                 {selectedMarkerNav.distance >= 1000
-                  ? `${(selectedMarkerNav.distance / 1000).toFixed(1)} km`
-                  : `${selectedMarkerNav.distance} m`}
+                  ? `${(selectedMarkerNav.distance / 1000).toFixed(1)} ${t('kilometers')}`
+                  : `${selectedMarkerNav.distance} ${t('meters')}`}
               </div>
               <div className="top-direction">
                 {getCardinalDirection(selectedMarkerNav.bearing)}
@@ -349,12 +367,12 @@ export default function CompassView({ onOpenSetup }) {
           ) : (
             <div className="top-no-marker">
               {markersLoading
-                ? 'Loading markers…'
+                ? t('loadingMarkers')
                 : !headingReady || smoothHeading === null
-                  ? 'Calibrating compass…'
+                  ? t('calibratingCompass')
                   : exits.length === 0
-                    ? 'No markers — tap Setup'
-                    : 'Waiting for GPS…'}
+                    ? t('noMarkers')
+                    : t('waitingGPS')}
             </div>
           )}
         </div>
@@ -487,7 +505,7 @@ export default function CompassView({ onOpenSetup }) {
           {nearestExit && nearestExit.name === selectedMarker.name && (
             <div className="marker-distance">
               <div className="marker-distance-value">{getCardinalDirection(selectedMarkerNav?.bearing ?? 0)}</div>
-              <div className="marker-distance-label">direction</div>
+              <div className="marker-distance-label">{t('direction')}</div>
             </div>
           )}
         </div>
@@ -509,33 +527,33 @@ export default function CompassView({ onOpenSetup }) {
 
             <div className="gps-popup-body">
               <div className="marker-detail-row">
-                <span className="marker-label">Latitude:</span>
+                <span className="marker-label">{t('latitude')}:</span>
                 <span className="marker-value">{selectedMarker.lat.toFixed(6)}°</span>
               </div>
               <div className="marker-detail-row">
-                <span className="marker-label">Longitude:</span>
+                <span className="marker-label">{t('longitude')}:</span>
                 <span className="marker-value">{selectedMarker.lng.toFixed(6)}°</span>
               </div>
               {selectedMarker.altitude !== null && (
                 <div className="marker-detail-row">
-                  <span className="marker-label">Elevation:</span>
-                  <span className="marker-value">{selectedMarker.altitude} m</span>
+                  <span className="marker-label">{t('elevation')}:</span>
+                  <span className="marker-value">{selectedMarker.altitude} {t('meters')}</span>
                 </div>
               )}
               <div className="marker-detail-row">
-                <span className="marker-label">Accuracy:</span>
-                <span className="marker-value">±{selectedMarker.accuracy} m</span>
+                <span className="marker-label">{t('accuracy')}:</span>
+                <span className="marker-value">±{selectedMarker.accuracy} {t('meters')}</span>
               </div>
               <div className="marker-detail-row">
-                <span className="marker-label">Distance:</span>
+                <span className="marker-label">{t('distance')}:</span>
                 <span className="marker-value">
                   {selectedMarkerNav
-                    ? `${selectedMarkerNav.distance} m`
-                    : 'Calculating...'}
+                    ? `${selectedMarkerNav.distance} ${t('meters')}`
+                    : t('calculating')}
                 </span>
               </div>
               <div className="marker-detail-row">
-                <span className="marker-label">Direction:</span>
+                <span className="marker-label">{t('direction')}:</span>
                 <span className="marker-value">
                   {selectedMarkerNav
                     ? getCardinalDirection(selectedMarkerNav.bearing)
@@ -543,7 +561,7 @@ export default function CompassView({ onOpenSetup }) {
                 </span>
               </div>
               <div className="marker-detail-row">
-                <span className="marker-label">Saved:</span>
+                <span className="marker-label">{t('saved')}:</span>
                 <span className="marker-value">
                   {new Date(selectedMarker.timestamp).toLocaleString()}
                 </span>
@@ -558,22 +576,22 @@ export default function CompassView({ onOpenSetup }) {
       {gpsPosition && (
         <div className="gps-details">
           <div className="gps-detail-item">
-            <span className="gps-label">Latitude:</span>
+            <span className="gps-label">{t('latitude')}:</span>
             <span className="gps-value">{gpsPosition.lat.toFixed(6)}°</span>
           </div>
           <div className="gps-detail-item">
-            <span className="gps-label">Longitude:</span>
+            <span className="gps-label">{t('longitude')}:</span>
             <span className="gps-value">{gpsPosition.lng.toFixed(6)}°</span>
           </div>
           {gpsAltitude !== null && (
             <div className="gps-detail-item">
-              <span className="gps-label">Elevation:</span>
-              <span className="gps-value">{gpsAltitude} m</span>
+              <span className="gps-label">{t('elevation')}:</span>
+              <span className="gps-value">{gpsAltitude} {t('meters')}</span>
             </div>
           )}
           <div className="gps-detail-item">
-            <span className="gps-label">Accuracy:</span>
-            <span className="gps-value">±{gpsAccuracy} m</span>
+            <span className="gps-label">{t('accuracy')}:</span>
+            <span className="gps-value">±{gpsAccuracy} {t('meters')}</span>
           </div>
         </div>
       )}
@@ -583,14 +601,17 @@ export default function CompassView({ onOpenSetup }) {
         <div className="gps-info">
           {!calibration && (
             <div style={{ color: '#ff9800', fontSize: '0.75rem' }}>
-              Tap floor plan to set position
+              {t('tapFloorPlan')}
             </div>
           )}
         </div>
         
         <div className="button-group">
+          <button onClick={toggleLanguage} className="action-btn lang-btn">
+            {language === 'en' ? '한국어' : 'English'}
+          </button>
           <button onClick={onOpenSetup} className="action-btn">
-            📍 Setup Markers
+            {t('setupMarkers')}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { getMarkers, createMarker, deleteMarker } from '../services/markerService';
+import { t } from '../services/i18n';
 import './FloorPlanUpload.css';
 
 export default function FloorPlanUpload({ onClose }) {
@@ -13,6 +14,16 @@ export default function FloorPlanUpload({ onClose }) {
   const [gpsAltitude, setGpsAltitude] = useState(null);
   const [selectedExit, setSelectedExit] = useState(null);
   const watchIdRef = useRef(null);
+
+  // Language change listener
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      // Force re-render when language changes
+      setSelectedExit(prev => prev);
+    };
+    window.addEventListener('languagechange', handleLanguageChange);
+    return () => window.removeEventListener('languagechange', handleLanguageChange);
+  }, []);
 
   // Load markers from service
   const loadMarkers = async () => {
@@ -68,7 +79,12 @@ export default function FloorPlanUpload({ onClose }) {
   // Save current GPS position as exit marker
   const saveGPSPosition = async () => {
     if (!gpsPosition) {
-      alert('GPS position not available. Please wait for GPS signal.');
+      alert(t('gpsNotAvailable'));
+      return;
+    }
+
+    if (!exitName.trim()) {
+      alert(t('pleaseEnterName'));
       return;
     }
 
@@ -124,7 +140,7 @@ export default function FloorPlanUpload({ onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Setup Exit Markers</h2>
+          <h2>{t('setupTitle')}</h2>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -132,7 +148,7 @@ export default function FloorPlanUpload({ onClose }) {
           <div className="floor-plan-upload">
             <div className="upload-section">
               <label htmlFor="file-upload" className="upload-btn">
-                {floorPlan ? 'Change Floor Plan' : 'Upload Floor Plan'}
+                {floorPlan ? 'Change Floor Plan' : t('uploadFloorPlan')}
               </label>
               <input
                 id="file-upload"
@@ -146,7 +162,7 @@ export default function FloorPlanUpload({ onClose }) {
             {floorPlan && (
               <>
                 <div className="instructions">
-                  Save your current GPS location as an exit marker
+                  {t('saveMarker')}
                 </div>
 
           {/* GPS Information Display */}
@@ -159,22 +175,22 @@ export default function FloorPlanUpload({ onClose }) {
                 {gpsAccuracy >= 20 && <span className="quality-poor">🔴 Poor GPS - Move outdoors</span>}
               </div>
               <div className="gps-info-row">
-                <span className="label">Latitude:</span>
+                <span className="label">{t('latitude')}:</span>
                 <span className="value">{gpsPosition.lat.toFixed(6)}°</span>
               </div>
               <div className="gps-info-row">
-                <span className="label">Longitude:</span>
+                <span className="label">{t('longitude')}:</span>
                 <span className="value">{gpsPosition.lng.toFixed(6)}°</span>
               </div>
               {gpsAltitude !== null && (
                 <div className="gps-info-row">
-                  <span className="label">Elevation:</span>
-                  <span className="value">{gpsAltitude} m</span>
+                  <span className="label">{t('elevation')}:</span>
+                  <span className="value">{gpsAltitude} {t('meters')}</span>
                 </div>
               )}
               <div className="gps-info-row">
-                <span className="label">Accuracy:</span>
-                <span className="value">±{gpsAccuracy} m</span>
+                <span className="label">{t('accuracy')}:</span>
+                <span className="value">±{gpsAccuracy} {t('meters')}</span>
               </div>
             </div>
           ) : (
@@ -186,7 +202,7 @@ export default function FloorPlanUpload({ onClose }) {
           <div className="exit-name-input">
             <input
               type="text"
-              placeholder="Exit name (optional)"
+              placeholder={t('markerNamePlaceholder')}
               value={exitName}
               onChange={(e) => setExitName(e.target.value)}
             />
@@ -197,18 +213,18 @@ export default function FloorPlanUpload({ onClose }) {
             className="save-gps-btn"
             disabled={!gpsPosition || saving}
           >
-            {saving ? 'Saving…' : '📍 Save Current GPS Position'}
+            {saving ? 'Saving…' : `📍 ${t('saveMarker')}`}
           </button>
 
           <div className="exits-list">
-            <h3>Saved Exit Markers ({exits.length})</h3>
+            <h3>{t('savedMarkers')} ({exits.length})</h3>
             {loading ? (
               <div style={{ color: '#aaa', textAlign: 'center', padding: '10px' }}>
-                Loading markers…
+                {t('loadingMarkers')}
               </div>
             ) : exits.length === 0 ? (
               <div style={{ color: '#555', textAlign: 'center', padding: '10px' }}>
-                No markers saved yet
+                {t('noSavedMarkers')}
               </div>
             ) : exits.map((exit) => (
               <div key={exit.id} className="exit-item">
@@ -224,25 +240,25 @@ export default function FloorPlanUpload({ onClose }) {
                   {selectedExit === exit.id ? (
                     <div className="exit-details">
                       <div className="detail-row">
-                        <span className="detail-label">Latitude:</span>
+                        <span className="detail-label">{t('latitude')}:</span>
                         <span className="detail-value">{exit.lat.toFixed(6)}°</span>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Longitude:</span>
+                        <span className="detail-label">{t('longitude')}:</span>
                         <span className="detail-value">{exit.lng.toFixed(6)}°</span>
                       </div>
                       {exit.altitude !== null && (
                         <div className="detail-row">
-                          <span className="detail-label">Elevation:</span>
-                          <span className="detail-value">{exit.altitude} m</span>
+                          <span className="detail-label">{t('elevation')}:</span>
+                          <span className="detail-value">{exit.altitude} {t('meters')}</span>
                         </div>
                       )}
                       <div className="detail-row">
-                        <span className="detail-label">Accuracy:</span>
-                        <span className="detail-value">±{exit.accuracy} m</span>
+                        <span className="detail-label">{t('accuracy')}:</span>
+                        <span className="detail-value">±{exit.accuracy} {t('meters')}</span>
                       </div>
                       <div className="detail-row">
-                        <span className="detail-label">Saved:</span>
+                        <span className="detail-label">{t('saved')}:</span>
                         <span className="detail-value">
                           {new Date(exit.timestamp).toLocaleString()}
                         </span>
@@ -256,7 +272,7 @@ export default function FloorPlanUpload({ onClose }) {
                   onClick={(e) => { e.stopPropagation(); removeExit(exit.id); }} 
                   className="remove-btn"
                 >
-                  Remove
+                  {t('deleteButton')}
                 </button>
               </div>
             ))}
