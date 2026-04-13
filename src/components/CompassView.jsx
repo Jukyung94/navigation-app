@@ -3,8 +3,9 @@ import { getMarkers } from '../services/markerService';
 import './CompassView.css';
 
 export default function CompassView({ onOpenSetup }) {
-  const [heading, setHeading] = useState(0);
-  const [smoothHeading, setSmoothHeading] = useState(0);
+  const [heading, setHeading] = useState(null);
+  const [smoothHeading, setSmoothHeading] = useState(null);
+  const [headingReady, setHeadingReady] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(() => {
     return !(typeof DeviceOrientationEvent !== 'undefined' && 
              typeof DeviceOrientationEvent.requestPermission === 'function');
@@ -53,11 +54,9 @@ export default function CompassView({ onOpenSetup }) {
     // Re-fetch when storage changes (e.g. marker added in Setup modal)
     const handleStorageChange = () => loadMarkers();
     window.addEventListener('storage', handleStorageChange);
-    const interval = setInterval(handleStorageChange, 1000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
     };
   }, [loadMarkers]);
 
@@ -86,15 +85,25 @@ export default function CompassView({ onOpenSetup }) {
 
     // Track which event source we're using to avoid conflicts
     let usingAbsolute = false;
+    let firstReading = true;
 
     const applyHeading = (raw) => {
       const h = ((raw % 360) + 360) % 360;
-      setHeading(prev => {
-        // Only update if change is meaningful (reduces noise)
-        const diff = Math.abs(h - prev);
-        const wrapped = diff > 180 ? 360 - diff : diff;
-        return wrapped < 0.5 ? prev : h;
-      });
+      
+      if (firstReading) {
+        // On first reading, set immediately without smoothing
+        setHeading(h);
+        setSmoothHeading(h);
+        setHeadingReady(true);
+        firstReading = false;
+      } else {
+        setHeading(prev => {
+          // Only update if change is meaningful (reduces noise)
+          const diff = Math.abs(h - prev);
+          const wrapped = diff > 180 ? 360 - diff : diff;
+          return wrapped < 0.5 ? prev : h;
+        });
+      }
     };
 
     const handleAbsolute = (event) => {
@@ -129,10 +138,14 @@ export default function CompassView({ onOpenSetup }) {
 
   // Smooth heading interpolation — runs on rAF, not setInterval
   useEffect(() => {
+    if (heading === null) return;
+    
     let rafId;
 
     const step = () => {
       setSmoothHeading(current => {
+        if (current === null) return heading;
+        
         let diff = heading - current;
         if (diff > 180) diff -= 360;
         if (diff < -180) diff += 360;
@@ -288,16 +301,6 @@ export default function CompassView({ onOpenSetup }) {
     return directions[index];
   };
 
-  // Test function to simulate compass rotation
-  const testCompass = () => {
-    let angle = 0;
-    const interval = setInterval(() => {
-      angle = (angle + 5) % 360;
-      setHeading(angle);
-      if (angle === 0) clearInterval(interval);
-    }, 50);
-  };
-
   if (permissionNeeded && !permissionGranted) {
     return (
       <div className="permission-screen">
@@ -319,7 +322,7 @@ export default function CompassView({ onOpenSetup }) {
       <div className="compass-content">
         {/* Top display: distance + direction arrow to selected marker */}
         <div className="top-display">
-          {selectedMarker && selectedMarkerNav ? (
+          {selectedMarker && selectedMarkerNav && headingReady && smoothHeading !== null ? (
             <>
               <svg
                 className="direction-arrow"
@@ -347,15 +350,18 @@ export default function CompassView({ onOpenSetup }) {
             <div className="top-no-marker">
               {markersLoading
                 ? 'Loading markers…'
-                : exits.length === 0
-                  ? 'No markers — tap Setup'
-                  : 'Waiting for GPS…'}
+                : !headingReady || smoothHeading === null
+                  ? 'Calibrating compass…'
+                  : exits.length === 0
+                    ? 'No markers — tap Setup'
+                    : 'Waiting for GPS…'}
             </div>
           )}
         </div>
 
         <div className="compass-container" style={{ '--compass-size': `min(280px, 72vw)` }}>
         {/* Rotating compass ring with markers */}
+        {smoothHeading !== null && (
         <div 
           className="compass-ring"
           style={{ transform: `rotate(${-smoothHeading}deg)` }}
@@ -375,9 +381,10 @@ export default function CompassView({ onOpenSetup }) {
             </div>
           ))}
         </div>
+        )}
 
         {/* Cardinal directions - move around the compass */}
-        {[
+        {smoothHeading !== null && [
           { dir: 'N', angle: 0 },
           { dir: 'E', angle: 90 },
           { dir: 'S', angle: 180 },
@@ -406,6 +413,7 @@ export default function CompassView({ onOpenSetup }) {
         })}
 
         {/* Floor plan layer (rotates with compass) */}
+        {smoothHeading !== null && (
         <div
           className="floor-plan-layer"
           style={{
@@ -432,6 +440,7 @@ export default function CompassView({ onOpenSetup }) {
             />
           ))}
         </div>
+        )}
 
         {/* Center crosshair (fixed) */}
         <div className="crosshair" />
@@ -580,9 +589,6 @@ export default function CompassView({ onOpenSetup }) {
         </div>
         
         <div className="button-group">
-          <button onClick={testCompass} className="action-btn test-btn">
-            Test Rotation
-          </button>
           <button onClick={onOpenSetup} className="action-btn">
             📍 Setup Markers
           </button>
