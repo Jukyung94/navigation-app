@@ -3,7 +3,7 @@ import { getMarkers } from '../services/markerService';
 import { t, getLanguage, setLanguage } from '../services/i18n';
 import './CompassView.css';
 
-export default function CompassView({ onOpenSetup }) {
+export default function CompassView({ onOpenSetup, isAdmin = 1 }) {
   const [heading, setHeading] = useState(null);
   const [smoothHeading, setSmoothHeading] = useState(null);
   const [headingReady, setHeadingReady] = useState(false);
@@ -30,8 +30,23 @@ export default function CompassView({ onOpenSetup }) {
     return saved ? JSON.parse(saved) : null;
   });
   const [language, setLanguageState] = useState(getLanguage());
+  const [isMobile, setIsMobile] = useState(false);
   
   const watchIdRef = useRef(null);
+
+  // Detect if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const smallScreen = window.innerWidth <= 768;
+      setIsMobile(mobile || (touchDevice && smallScreen));
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Get selected marker
   const selectedMarker = exits.length > 0 ? exits[selectedMarkerIndex] : null;
@@ -336,6 +351,23 @@ export default function CompassView({ onOpenSetup }) {
 
   return (
     <div className="compass-view">
+      {/* Mobile-only notice banner */}
+      {!isMobile && (
+        <div className="mobile-only-banner">
+          <div className="banner-icon">📱</div>
+          <div className="banner-content">
+            <div className="banner-title">
+              {language === 'en' ? 'Mobile Device Required' : '모바일 기기 필요'}
+            </div>
+            <div className="banner-text">
+              {language === 'en' 
+                ? 'This compass feature requires a mobile device with GPS and orientation sensors. Please access this page from your smartphone or tablet.'
+                : '이 나침반 기능은 GPS 및 방향 센서가 있는 모바일 기기가 필요합니다. 스마트폰이나 태블릿에서 이 페이지에 접속하세요.'}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Compass content centered */}
       <div className="compass-content">
         {/* Top display: distance + direction arrow to selected marker */}
@@ -610,9 +642,11 @@ export default function CompassView({ onOpenSetup }) {
           <button onClick={toggleLanguage} className="action-btn lang-btn">
             {language === 'en' ? '한국어' : 'English'}
           </button>
-          <button onClick={onOpenSetup} className="action-btn">
-            {t('setupMarkers')}
-          </button>
+          {isAdmin === 1 && (
+            <button onClick={onOpenSetup} className="action-btn">
+              {t('setupMarkers')}
+            </button>
+          )}
         </div>
       </div>
     </div>
